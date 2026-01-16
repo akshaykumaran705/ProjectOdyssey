@@ -3,12 +3,14 @@ from schema import Users,Cases,CaseFiles,AuditLogs
 from db import SessionLocal, engine
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from typing import Annotated
+from typing import Annotated, Optional
 from fastapi import Depends
 import schema
 import model 
+import auth
+from fastapi import HTTPException 
 app = FastAPI(title="ProjectOdyssey")
-token = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 model.Base.metadata.create_all(bind=engine)
 def get_db():
     db = SessionLocal()
@@ -17,6 +19,18 @@ def get_db():
     finally:
         db.close()
 db_dependency = Annotated[Session, Depends(get_db)]
+def get_current_user_from_token(token:str = Depends(oauth2_scheme),db:db_dependency = None) -> model.Users:
+    credential_exception = HTTPException(status_code = 401,detail = "Invalid auth credentials")
+    payload = auth.verify_token(token)
+    if payload is None:
+        raise credential_exception
+    user_id:Optional[str] = payload.get("sub")
+    if user_id is None:
+        raise credential_exception
+    user = db.query(model.Users).filter(model.Users.id == user_id).first()
+    if user is None:
+        raise credential_exception
+    return user
 @app.get("/health")
 async def health_check():
     return {"status":"ok"}
@@ -29,30 +43,30 @@ async def register_user(user:schema.UserCreate,db:db_dependency) -> dict:
     existing_user = db.query(model.Users).filter(model.Users.email==user.email).first()
     if existing_user:
         return {"Error":"Email Id already exists"}
-    new_user = model.Users(email = user.email,password = user.password,role = user.role)
+    hashed_password = auth.get_password_hash(user.password)
+    new_user = model.Users(email = user.email,password = hashed_password ,role = user.role)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return {"Message":"User Registered Successfully","user_id":new_user.id}
+
+
+
 @app.post("/auth/login")
-async def login_user(user:schema.UserLogin,db:db_dependency):
-    if not user.email or not user.password:
-        return {"error":"Email and passwords are required"}
-    db_user = db.query(model.Users).filter(model.Users.email == user.email).first()
-    if not db_user or db_user.password != user.password:
-        return {"error":"Invalid email or password"}
-    return {"message":"User logged in successfully","user_id":db_user.id}
+async def login_user(form_data:OAuth2PasswordRequestForm = Depends(),db:db_dependency=None):
+    user = db.query(model.Users).filter(model.Users.email == form_data.username).first()
+    if not user or not auth.verify_password(form_data.password,user.password):
+        raise HTTPException(status_code = 400, detail = "Invalid Credentials")
+    access_token = auth.create_access_token(data={"sub":str(user.id)})
+    return {"access_token":access_token,"token_type":"bearer"}
+
 @app.get("/auth/me")
-async def get_current_user(db:db_dependency):
-    user = db.query(model.Users).first()
-    if not user:
-        return {"error":"User not found"}
-    return {"user":{"id":user.id,"email":user.email,"role":user.role}}
+async def get_current_user(current_user: model.Users = Depends(get_current_user_from_token)):
+   return current_user
 @app.post("/cases")
-async def create_case(case:schema.CaseCreate,db:db_dependency):
+async def create_case(case:schema.CaseCreate,db:db_dependency,current_user:model.Users = Depends(get_current_user_from_token)):
     if not case.title or not case.chief_complaint:
         return {"error":"Title and chief complaint are required"}
-    # TODO: Get actual user_id from authentication token/session
     first_user = db.query(model.Users).first()
     if not first_user:
         return {"error":"No users found. Please register first."}

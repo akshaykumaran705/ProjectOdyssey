@@ -7,7 +7,7 @@ class UserCreate(BaseModel):
     email: str
     password: str
     role: str
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now())
 
 class UserLogin(BaseModel):
     email: str
