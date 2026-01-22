@@ -11,6 +11,7 @@ import auth
 from fastapi import HTTPException 
 import io
 import object_store
+import uuid
 app = FastAPI(title="ProjectOdyssey")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 model.Base.metadata.create_all(bind=engine)
@@ -77,7 +78,7 @@ async def create_case(case:schema.CaseCreate,db:db_dependency,current_user:model
     if not first_user:
         return {"error":"No users found. Please register first."}
     new_case = model.Cases(
-        created_by_user_id=first_user.id,
+        created_by_user_id=current_user.id,
         title=case.title,
         chief_complaint=case.chief_complaint,
         history_present_illness=case.history_present_illness,
@@ -90,11 +91,11 @@ async def create_case(case:schema.CaseCreate,db:db_dependency,current_user:model
     return {"message":"Case created successfully","case_id":new_case.id}
 @app.get("/cases")
 async def get_cases(current_user:model.Users = Depends(get_current_user_from_token),db:db_dependency=None):
-    cases = db.query(model.Cases).all()
+    cases = db.query(model.Cases).filter(model.Cases.created_by_user_id == current_user.id).all()
     return {"cases":[{"id":c.id,"title":c.title,"chief_complaint":c.chief_complaint,"created_by_user_id":c.created_by_user_id} for c in cases]}
 @app.get("/cases/{case_id}")
-async def get_case(case_id:int,db:db_dependency = None):
-    case = db.query(model.Cases).filter(model.Cases.id == case_id).first()
+async def get_case(case_id:int,db:db_dependency = None,current_user:model.Users = Depends(get_current_user_from_token)):
+    case = db.query(model.Cases).filter(model.Cases.id == case_id,model.Cases.created_by_user_id == current_user.id).first()
     if not case:
         return {"error":"Case not found"}
     return {"case":{"id":case.id,"title":case.title,"chief_complaint":case.chief_complaint,"created_by_user_id":case.created_by_user_id}}
@@ -102,9 +103,17 @@ async def get_case(case_id:int,db:db_dependency = None):
 async def upload_case_file(case_id:int,file:UploadFile = File(...),db:db_dependency=None,current_user:model.Users = Depends(get_current_user_from_token)):
     if file.content_type not in ["application/pdf","image/png","image/jpeg"]:
         return {"error":"Unsupported file type"}
-    if file.size > 5 * 1024 * 1024:
-        return {"error":"File size exceeds limit"}
-    key = f"case_{case_id}-{file.filename}"
     data = await file.read()
+    size = len(data)
+    if size > 5 * 1024 * 1024:
+        return {"error":"File size exceeds limit"}
+    key = f"case_{case_id}/{uuid.uuid4()}-{file.filename}"
+    case = db.query(model.Cases).filter(model.Cases.id == case_id,model.Cases.created_by_user_id == current_user.id).first()
+    if not case:
+        return {"Error":"Case not found"}
+    new_file = model.CaseFiles(case_id = case_id,content_type = file.content_type,object_key = key,size_bytes = size)
+    db.add(new_file)
+    db.commit()
+    db.refresh(new_file)
     object_store.object_store.upload_fileobj(fileobj = io.BytesIO(data),key = key,content_type=file.content_type)
-    return {"File Uploaded Successfully":key,"size":len(data)}
+    return {"File Uploaded Successfully":key,"size":size}
