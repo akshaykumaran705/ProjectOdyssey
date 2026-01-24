@@ -1,17 +1,28 @@
-from pydantic import BaseModel, Field
-import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, ConfigDict
 
-# Request schemas (for creating/updating)
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# -------------------------
+# Request schemas
+# -------------------------
 class UserCreate(BaseModel):
     email: str
     password: str
     role: str
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.now())
+    # IMPORTANT: generally do NOT accept created_at from client
+    # remove this field entirely for request models
+    # created_at: datetime = Field(default_factory=now_utc)
+
 
 class UserLogin(BaseModel):
     email: str
     password: str
+
 
 class CaseCreate(BaseModel):
     title: str
@@ -20,29 +31,37 @@ class CaseCreate(BaseModel):
     age: Optional[int] = None
     sex: Optional[str] = None
 
+
 class CaseFileCreate(BaseModel):
     case_id: int
+    file_name: str
     content_type: str
     object_key: str
     size_bytes: int
 
+
 class AuditLogCreate(BaseModel):
     user_id: int
-    case_id: int
+    case_id: Optional[int] = None
     action: str
-    meta_data: str  # Fixed: match model.py field name
+    meta_data: Dict[str, Any] = Field(default_factory=dict)
 
-# Response schemas (for reading)
+
+# -------------------------
+# Response schemas
+# -------------------------
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: str
     role: str
-    created_at: datetime.datetime
-    
-    class Config:
-        from_attributes = True
+    created_at: datetime
+
 
 class CaseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_by_user_id: int
     title: str
@@ -50,51 +69,66 @@ class CaseResponse(BaseModel):
     history_present_illness: Optional[str] = None
     age: Optional[int] = None
     sex: Optional[str] = None
-    created_at: datetime.datetime
-    updated_at: datetime.datetime
-    
-    class Config:
-        from_attributes = True
+    created_at: datetime
+    updated_at: datetime
+
 
 class CaseFileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     case_id: int
+    file_name: str
     content_type: str
     object_key: str
     size_bytes: int
-    created_at: datetime.datetime
-    
-    class Config:
-        from_attributes = True
+    created_at: datetime
+
 
 class AuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     user_id: int
-    case_id: int
+    case_id: Optional[int] = None
     action: str
-    meta_data: str
-    created_at: datetime.datetime
-    
-    class Config:
-        from_attributes = True
+    meta_data: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
 
-# Legacy models (keeping for backward compatibility if needed)
-class Users(UserCreate):
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
-class Cases(CaseCreate):
-    created_by_user_id: int
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
-    updated_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+# -------------------------
+# Structured case schema
+# -------------------------
+class Timeline(BaseModel):
+    onset: Optional[str] = None
+    duration: Optional[str] = None
+    progression: Optional[str] = None
 
-class CaseFiles(CaseFileCreate):
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
 
-class AuditLogs(AuditLogCreate):
-    created_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+class AbnormalLabs(BaseModel):
+    name: str
+    value: Optional[str] = None
+    units: Optional[str] = None
+    flag: Optional[str] = None
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
 
-exported_models = [Users, Cases, CaseFiles, AuditLogs]
+class StructuredCase(BaseModel):
+    age: Optional[int] = None
+    sex: Optional[str] = None
+    chief_complaint: str
+    history_present_illness: Optional[str] = None
+
+    symptoms: List[str] = Field(default_factory=list)
+    timeline: Timeline = Field(default_factory=Timeline)
+
+    exam_findings: List[str] = Field(default_factory=list)
+    abnormal_labs: List[AbnormalLabs] = Field(default_factory=list)
+
+    medications: List[str] = Field(default_factory=list)
+    allergies: List[str] = Field(default_factory=list)
+    comorbidities: List[str] = Field(default_factory=list)
+    family_history: List[str] = Field(default_factory=list)
+
+    red_flags: List[str] = Field(default_factory=list)
+    negatives: List[str] = Field(default_factory=list)
+    missing_info: List[str] = Field(default_factory=list)

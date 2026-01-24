@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Column, Integer, String, DateTime
+from sqlalchemy import ForeignKey, Column, Integer, String, DateTime,Text
 from sqlalchemy.sql import func
 from db import Base
 import datetime
@@ -27,6 +27,7 @@ class CaseFiles(Base):
     __tablename__ = 'case_files'
     id = Column(Integer, primary_key=True, index=True)
     case_id = Column(Integer, ForeignKey('cases.id'))
+    file_name = Column(String)
     content_type = Column(String)
     object_key = Column(String)
     size_bytes = Column(Integer)
@@ -40,3 +41,20 @@ class AuditLogs(Base):
     action = Column(String)
     meta_data = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+class CaseDocumentsText(Base):
+    __tablename__ = "case_documents_text"
+    id = Column(Integer,primary_key=True,index = True)
+    case_id = Column(Integer,ForeignKey("cases.id"))
+    file_id = Column(Integer,ForeignKey("case_files.id"))
+    extracted_text = Column(Text,nullable=False)
+    extraction_method = Column(String)
+    #created_at = Column(DateTime,default = datetime.datetime.utcnow)
+
+class CaseStructured(Base):
+    __tablename__ = "case_structured"
+    id = Column(Integer,primary_key = True,index = True)
+    case_id = Column(Integer,ForeignKey("cases.id"))
+    normalized_data = Column(String)
+    source_hash = Column(String)
+    created_at = Column(DateTime,default = datetime.datetime.utcnow)
+    #updated_at = Column(DateTime,default = datetime.datetime.utcnow,onupdate=datetime.datetime.utcnow)

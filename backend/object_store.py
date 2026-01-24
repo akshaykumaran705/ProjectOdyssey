@@ -24,3 +24,4 @@ class ObjectStore:
         self.client.upload_fileobj(Fileobj = fileobj,Key = key,Bucket = os.getenv("S3_BUCKET_NAME"),ExtraArgs = {"ContentType":content_type} )
 object_store = ObjectStore()
 
+

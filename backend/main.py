@@ -1,5 +1,4 @@
 from fastapi import FastAPI,File,UploadFile
-from schema import Users,Cases,CaseFiles,AuditLogs
 from db import SessionLocal, engine
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -7,6 +6,8 @@ from typing import Annotated, Optional
 from fastapi import Depends
 import schema
 import model 
+import pdf_extractor
+import narrative_builder
 import auth
 from fastapi import HTTPException 
 import io
@@ -56,8 +57,6 @@ async def register_user(user:schema.UserCreate,db:db_dependency) -> dict:
     db.commit()
     db.refresh(new_user)
     return {"Message":"User Registered Successfully","user_id":new_user.id}
-
-
 
 @app.post("/auth/login")
 async def login_user(form_data:OAuth2PasswordRequestForm = Depends(),db:db_dependency=None):
@@ -111,9 +110,25 @@ async def upload_case_file(case_id:int,file:UploadFile = File(...),db:db_depende
     case = db.query(model.Cases).filter(model.Cases.id == case_id,model.Cases.created_by_user_id == current_user.id).first()
     if not case:
         return {"Error":"Case not found"}
-    new_file = model.CaseFiles(case_id = case_id,content_type = file.content_type,object_key = key,size_bytes = size)
+    new_file = model.CaseFiles(case_id = case_id,file_name=file.filename,content_type = file.content_type,object_key = key,size_bytes = size)
     db.add(new_file)
     db.commit()
     db.refresh(new_file)
     object_store.object_store.upload_fileobj(fileobj = io.BytesIO(data),key = key,content_type=file.content_type)
     return {"File Uploaded Successfully":key,"size":size}
+
+@app.post("/cases/{case_id}/normalize")
+async def normalize_case_data(case_id:int,db:db_dependency = None, current_user:model.Users = Depends(get_current_user_from_token)):
+    case = db.query(model.Cases).filter(model.Cases.id == case_id,model.Cases.created_by_user_id == current_user.id).first()
+    if not case:
+        return {"error":"Case not found"}
+    pdf_extractor.process_pdf_extraction(db,case_id)
+    docs = db.query(model.CaseDocumentsText).filter(model.CaseDocumentsText.case_id==case.id).all()
+    narrative = narrative_builder.build_case_narrative(case,docs)
+    return {
+        "message": "Case Normalized",
+        "case_id": case_id,
+        "documents_extracted": len(docs),
+        "narrative":narrative[:1500]
+    }
+    
