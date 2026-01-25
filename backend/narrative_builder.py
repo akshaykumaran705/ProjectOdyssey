@@ -25,5 +25,5 @@ def build_case_narrative(case:model.Cases, extracted_documents:List[model.CaseDo
             docs_section.append(f"""Document{idx} Source file id: {doc.file_id} {doc_text}""".strip())
             sections.append("\n".join(docs_section))
             sections.append("END OF CASE")
-            narrative = "\n\n".join(sections)
+            narrative = "\n".join(sections)
             return narrative

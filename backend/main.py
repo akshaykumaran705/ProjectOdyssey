@@ -13,6 +13,7 @@ from fastapi import HTTPException
 import io
 import object_store
 import uuid
+from source_hashing import compute_source_hash
 app = FastAPI(title="ProjectOdyssey")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 model.Base.metadata.create_all(bind=engine)
@@ -123,11 +124,36 @@ async def normalize_case_data(case_id:int,db:db_dependency = None, current_user:
     if not case:
         return {"error":"Case not found"}
     pdf_extractor.process_pdf_extraction(db,case_id)
+    case_fields = {
+        "age":case.age,
+        "sex":case.sex,
+        "chief_complaint":case.chief_complaint,
+        "history_present_illness":case.history_present_illness
+    }
     docs = db.query(model.CaseDocumentsText).filter(model.CaseDocumentsText.case_id==case.id).all()
+    extracted_docs = [{
+        "file_id":d.file_id,
+        "extracted_text": d.extracted_text,
+    } for d in docs]
+    source_hash = compute_source_hash(case_fields,extracted_docs)
+    existing = db.query(model.CaseStructured).filter(model.CaseStructured.case_id == case_id).first()
+    if existing and existing.source_hash == source_hash:
+        return{
+            "case_id": case_id,
+            "status":"already_normalized",
+            "source_hash":source_hash
+        }
+    
     narrative = narrative_builder.build_case_narrative(case,docs)
+    new_case = model.CaseStructured(case_id=case.id,source_hash=source_hash,normalized_data=narrative) 
+    db.add(new_case)
+    db.commit()
+    db.refresh(new_case)
     return {
         "message": "Case Normalized",
         "case_id": case_id,
+        "status":"Normalized",
+        "source_hase":source_hash,
         "documents_extracted": len(docs),
         "narrative":narrative[:1500]
     }
