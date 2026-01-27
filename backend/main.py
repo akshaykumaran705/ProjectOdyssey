@@ -14,6 +14,7 @@ import io
 import object_store
 import uuid
 from source_hashing import compute_source_hash
+import structured_case
 app = FastAPI(title="ProjectOdyssey")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 model.Base.metadata.create_all(bind=engine)
@@ -145,7 +146,9 @@ async def normalize_case_data(case_id:int,db:db_dependency = None, current_user:
         }
     
     narrative = narrative_builder.build_case_narrative(case,docs)
-    new_case = model.CaseStructured(case_id=case.id,source_hash=source_hash,normalized_data=narrative) 
+    structured = structured_case.narrative_to_structured_case(narrative)
+    structured_json = structured.model_dump()
+    new_case = model.CaseStructured(case_id=case.id,source_hash=source_hash,normalized_data=structured_json) 
     db.add(new_case)
     db.commit()
     db.refresh(new_case)
@@ -153,6 +156,7 @@ async def normalize_case_data(case_id:int,db:db_dependency = None, current_user:
         "message": "Case Normalized",
         "case_id": case_id,
         "status":"Normalized",
+        "structured_case":structured_json,
         "source_hase":source_hash,
         "documents_extracted": len(docs),
         "narrative":narrative[:1500]

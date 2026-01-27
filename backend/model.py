@@ -1,7 +1,9 @@
 from sqlalchemy import ForeignKey, Column, Integer, String, DateTime,Text
 from sqlalchemy.sql import func
+from sqlalchemy import UniqueConstraint
 from db import Base
 import datetime
+from sqlalchemy.dialects.postgresql import JSONB
 
 class Users(Base):
     __tablename__ = 'users'
@@ -54,7 +56,22 @@ class CaseStructured(Base):
     __tablename__ = "case_structured"
     id = Column(Integer,primary_key = True,index = True)
     case_id = Column(Integer,ForeignKey("cases.id"))
-    normalized_data = Column(String)
+    normalized_data = Column(JSONB,nullable=False)
     source_hash = Column(String)
     created_at = Column(DateTime,default = datetime.datetime.utcnow)
     #updated_at = Column(DateTime,default = datetime.datetime.utcnow,onupdate=datetime.datetime.utcnow)
+
+class CaseAnalysis(Base):
+    __tablename__ = "case_analysis"
+    id = Column(Integer,primary_key=True)
+    case_id = Column(Integer,ForeignKey="case.id",index=True)
+    source_hash = Column(Text)
+    analysis_version = Column(Text)
+    analysis_data = Column(JSONB,nullable=False)
+    created_at = Column(DateTime,default=datetime.datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint("case_id","source_hash","analysis_version",name="uq_case_analysis_case_hash_version")
+    )
+
+
+
