@@ -13,6 +13,9 @@ from fastapi import HTTPException
 import io
 import object_store
 import uuid
+import case_analysis
+from builder import generate_case_analysis
+from runner import LLMRunner
 from source_hashing import compute_source_hash
 import structured_case
 app = FastAPI(title="ProjectOdyssey")
@@ -161,4 +164,43 @@ async def normalize_case_data(case_id:int,db:db_dependency = None, current_user:
         "documents_extracted": len(docs),
         "narrative":narrative[:1500]
     }
+
+@app.post("/cases/{case_id}/analyze")
+def analyze_case(case_id:int,body:schema.AnalyzeRequest,db:db_dependency=None,current_user = Depends(get_current_user_from_token)):
+    case = db.query(model.Cases).filter(model.Cases.id==case_id,model.Cases.created_by_user_id==current_user.id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
     
+    structured = db.query(model.CaseStructured).filter(model.CaseStructured.case_id==case_id).first()
+    if not structured:
+        raise HTTPException(status_code=400,detail="Case not normalized yet")
+    narrative_text = case.narrative_text if hasattr(case,"narrative_text") else ""
+    if not narrative_text:
+        narrative_text= ""
+    runner = LLMRunner(base_url = "http://localhost:8080/",model="mlx-community/medgemma-4b-it-4bit")
+    analysis_row, cache_hit = generate_case_analysis(db,case_id=case_id,structured_source_hash= structured.source_hash,structured_case=structured.normalized_data,narrative = narrative_text,analysis_version=body.analysis_version,force=body.force,runner=runner)
+
+    return {
+        "case_id":analysis_row.case_id,
+        "source_hash":analysis_row.source_hash,
+        "analysis_version":analysis_row.analysis_version,
+        "analysis_data":analysis_row.analysis_data,
+        "created_at": analysis_row.created_at,
+    }
+
+@app.get("/cases/{case_id}/analysis")
+def get_analysis(case_id:int,analyis_version:str="v1",db:db_dependency=None,current_user=Depends(get_current_user_from_token)):
+    case = db.query(model.Cases).filter(model.Cases.id==case_id,model.Cases.created_by_user_id==current_user.id).first()
+    if not case:
+        raise HTTPException(status_code=404,detail="Case not found")
+    row = case_analysis.get_latest_case_analysis(db,case_id=case_id,analysis_version=analyis_version)
+    if not row:
+        raise HTTPException(status_code=404,detail="No Analysis found")
+    
+    return {
+        "case_id":row.case_id,
+        "source_hash":row.source_hash,
+        "analysis_version":row.analysis_version,
+        "analysis_data":row.analysis_data,
+        "created_at":row.created_at
+    }

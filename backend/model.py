@@ -64,14 +64,13 @@ class CaseStructured(Base):
 class CaseAnalysis(Base):
     __tablename__ = "case_analysis"
     id = Column(Integer,primary_key=True)
-    case_id = Column(Integer,ForeignKey="case.id",index=True)
-    source_hash = Column(Text)
-    analysis_version = Column(Text)
+    case_id = Column(Integer,ForeignKey("cases.id",ondelete="CASCADE"),index=True,nullable=False)
+    source_hash = Column(Text,nullable=False)
+    analysis_version = Column(Text,nullable=False,default="v1")
     analysis_data = Column(JSONB,nullable=False)
-    created_at = Column(DateTime,default=datetime.datetime.utcnow)
+    created_at = Column(DateTime,default=datetime.datetime.utcnow,nullable=False)
     __table_args__ = (
-        UniqueConstraint("case_id","source_hash","analysis_version",name="uq_case_analysis_case_hash_version")
+        UniqueConstraint("case_id","source_hash","analysis_version",name="uq_case_analysis_case_hash_version"),
     )
-
 
 

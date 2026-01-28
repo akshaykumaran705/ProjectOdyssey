@@ -136,6 +136,15 @@ class StructuredCase(BaseModel):
 Confidence = Literal["low","medium","high"]
 CareSetting = Literal["ED_now","urgent_care_24h","outpatient_routine"]
 
+class InputHashes(BaseModel):
+    structred_source_hash: str
+    narrative_hash:str
+
+class AnalysisMeta(BaseModel):
+    prompt_version:str
+    model_id:Optional[str]= None
+    latency_ms: Optional[str]=None
+
 class EvidenceItem(BaseModel):
     claim:str
     support:List[str] = Field(default_factory=list)
