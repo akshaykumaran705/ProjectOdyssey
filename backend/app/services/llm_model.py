@@ -1,17 +1,34 @@
 """
-Low-level LLM chat wrapper for the local MLX inference server.
+Low-level LLM chat wrapper.
+
+Supports two backends, selected via environment variables:
+
+1. Hugging Face Inference API (default for cloud deployment)
+   - Set HF_TOKEN to your Hugging Face access token
+   - Set LLM_MODEL to the model ID (default: google/medgemma-4b-it)
+
+2. Local MLX / Ollama server (for local development)
+   - Set LLM_BASE_URL to your local server URL (e.g. http://127.0.0.1:8080)
+   - Leave HF_TOKEN unset
+
 Used by structured_case.py for the normalize step.
 """
 import json
 import logging
+import os
 import re
 
 import requests
 
 log = logging.getLogger(__name__)
 
-import os
-MLX_URL = os.getenv("LLM_BASE_URL", "http://127.0.0.1:8080")
+HF_TOKEN = os.getenv("HF_TOKEN")
+LLM_MODEL = os.getenv("LLM_MODEL", "google/medgemma-4b-it")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://127.0.0.1:8080")
+
+# Use Hugging Face Inference API if token is set, otherwise fall back to local server
+USE_HF = bool(HF_TOKEN)
+
 MAX_PROMPT_CHARS = 2500  # keep prompt short to avoid context overflow on 4B model
 
 _JSON_OBJ_RE = re.compile(r"\{.*\}", re.S)
@@ -29,17 +46,36 @@ def medgemma_chat(prompt: str) -> str:
     if len(prompt) > MAX_PROMPT_CHARS:
         prompt = prompt[:MAX_PROMPT_CHARS] + "\n... [truncated]"
 
-    payload = {
-        "model": "mlx-community/medgemma-4b-it-4bit",
-        "messages": [
-            {"role": "system", "content": "You output JSON only. Be concise."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.1,
-        "max_tokens": 800,
-    }
+    messages = [
+        {"role": "system", "content": "You output JSON only. Be concise."},
+        {"role": "user", "content": prompt},
+    ]
 
-    r = requests.post(f"{MLX_URL}/chat/completions", json=payload, timeout=120)
+    if USE_HF:
+        # ── Hugging Face Serverless Inference API ──────────────────────────
+        # OpenAI-compatible endpoint provided by HF
+        url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {HF_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": LLM_MODEL,
+            "messages": messages,
+            "temperature": 0.1,
+            "max_tokens": 800,
+        }
+        r = requests.post(url, headers=headers, json=payload, timeout=120)
+    else:
+        # ── Local MLX / Ollama server ──────────────────────────────────────
+        payload = {
+            "model": LLM_MODEL,
+            "messages": messages,
+            "temperature": 0.1,
+            "max_tokens": 800,
+        }
+        r = requests.post(f"{LLM_BASE_URL}/chat/completions", json=payload, timeout=120)
+
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 
