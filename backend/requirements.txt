@@ -1,0 +1,16 @@
+SQLAlchemy
+boto3
+botocore
+fastapi
+bcrypt==4.0.1
+passlib[bcrypt]
+psycopg2-binary
+pydantic
+pypdf
+python-dotenv
+python-jose[cryptography]
+python-multipart
+reportlab
+requests
+uvicorn
+openai-whisper

@@ -1,0 +1,58 @@
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-odyssey}
+      POSTGRES_USER: ${POSTGRES_USER:-odyssey}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-odyssey_secret}
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-odyssey}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    # Removed invalid --license flag that was causing minio to crash
+    command: server /tmp/minio --console-address ":9001"
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    volumes:
+      - miniodata:/tmp/minio
+      - ~/minio:/root/minio:ro
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-odyssey}:${POSTGRES_PASSWORD:-odyssey_secret}@db:5432/${POSTGRES_DB:-odyssey}
+      S3_ENDPOINT: http://minio:9000
+      LLM_BASE_URL: http://host.docker.internal:8080
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3001:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  miniodata:
