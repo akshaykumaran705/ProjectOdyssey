@@ -52,9 +52,9 @@ def medgemma_chat(prompt: str) -> str:
     ]
 
     if USE_HF:
-        # ── Hugging Face Serverless Inference API ──────────────────────────
-        # OpenAI-compatible endpoint provided by HF
-        url = f"https://api-inference.huggingface.co/models/{LLM_MODEL}/v1/chat/completions"
+        # ── Hugging Face Serverless Inference API (new router endpoint) ────
+        # Model is specified in the payload; token needs "inference-providers" permission
+        url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {HF_TOKEN}",
             "Content-Type": "application/json",
