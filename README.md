@@ -261,7 +261,6 @@ ProjectOdyssey/
 
 - **Backend** is configured for [Railway](https://railway.app/) via `backend/railway.toml`
 - **Frontend** is configured for [Vercel](https://vercel.com/) via `frontend/.vercel/`
-- Set `NEXT_PUBLIC_API_URL` in Vercel to point to your deployed backend URL
 
 ---
 
