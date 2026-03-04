@@ -11,7 +11,7 @@ import requests
 log = logging.getLogger(__name__)
 
 import os
-MLX_URL = os.getenv("LLM_BASE_URL", "http://127.0.0.1:8080")
+MLX_URL = os.getenv("LLM_BASE_URL", "https://873b-2603-6081-ae40-131-f94e-be02-98a9-9ca7.ngrok-free.app")
 MAX_PROMPT_CHARS = 2500  # keep prompt short to avoid context overflow on 4B model
 
 _JSON_OBJ_RE = re.compile(r"\{.*\}", re.S)
